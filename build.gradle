@@ -1,0 +1,77 @@
+plugins {
+    id 'org.springframework.boot' version '2.3.0.RELEASE'
+    id 'io.spring.dependency-management' version '1.0.9.RELEASE'
+    id 'com.diffplug.gradle.spotless' version '4.1.0'
+    id "com.github.spotbugs" version "4.2.4"
+    id 'com.google.cloud.tools.jib' version '2.3.0'
+    id 'java'
+}
+
+group = 'io.terrible'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = '1.8'
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
+    // OpenCV
+    implementation 'org.openpnp:opencv:4.3.0-2'
+
+    // Apache
+    implementation 'org.apache.commons:commons-lang3:3.10'
+    implementation 'commons-io:commons-io:2.7'
+
+    // Google
+    implementation 'com.google.guava:guava:29.0-jre'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    testImplementation('org.springframework.boot:spring-boot-starter-test') {
+        exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
+    }
+    testImplementation 'io.projectreactor:reactor-test'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+spotless {
+    java {
+        licenseHeader '/* Licensed under Apache-2.0 */'
+        importOrder 'java', 'javax', 'org', 'com', ''
+        removeUnusedImports()
+        googleJavaFormat()
+    }
+}
+
+jib {
+    to {
+        image = 'peavers/terrible-face-detector'
+        auth {
+            username = System.getenv("DOCKER_USER")
+            password = System.getenv("DOCKER_PASS")
+        }
+        tags = ["latest", "${project.name}-${project.version}".toString()]
+    }
+    container {
+        creationTime = "USE_CURRENT_TIMESTAMP"
+        jvmFlags = ['-Dfile.encoding=UTF-8']
+        ports = ['8080']
+        labels = [maintainer: 'Chris Turner<peavers@gmail.com>']
+    }
+}
+
+build.dependsOn spotlessJavaApply
