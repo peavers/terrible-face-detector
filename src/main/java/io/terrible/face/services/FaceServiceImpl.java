@@ -1,117 +1,88 @@
 /* Licensed under Apache-2.0 */
 package io.terrible.face.services;
 
-import io.terrible.face.domain.DetectRequest;
-import io.terrible.face.utils.ClassifierUtils;
+import io.terrible.face.domain.FaceCoordinates;
+import io.terrible.face.extensions.AutoDeletingFile;
+import io.terrible.face.properties.ClassifierProperties;
 import java.io.File;
-import java.nio.file.Paths;
+import java.io.IOException;
+import java.util.ArrayDeque;
 import java.util.Arrays;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.FilenameUtils;
-import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfRect;
-import org.opencv.core.Point;
-import org.opencv.core.Scalar;
 import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.objdetect.CascadeClassifier;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
+import org.springframework.web.multipart.MultipartFile;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class FaceServiceImpl implements FaceService {
+
+  private final ClassifierProperties classifierProperties;
 
   private final CascadeClassifier classifier;
 
-  private final ImageService imageService;
-
-  /**
-   * Important constructor which loads in the OpenCV native library and decides what classifier to
-   * load.
-   */
-  public FaceServiceImpl(final ImageService imageService) {
-    System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
-
-    this.classifier = ClassifierUtils.load(ClassifierUtils.FRONTAL_FACE_ALT);
-    this.imageService = imageService;
-  }
-
   @Override
-  public Flux<DetectRequest> detect(final String input, final String output) {
-    return imageService.findImages(Paths.get(input)).flatMap(this::detectFaces);
+  public ArrayDeque<FaceCoordinates> detect(final MultipartFile multipartFile) throws IOException {
+
+    try (final AutoDeletingFile tempFile = new AutoDeletingFile()) {
+      final File file = tempFile.getFile();
+
+      multipartFile.transferTo(file);
+
+      return detectFaces(file);
+    }
   }
 
   /** Here is the actual workhorse of this service. */
-  private Mono<DetectRequest> detectFaces(final String input) {
-
+  private ArrayDeque<FaceCoordinates> detectFaces(final File input) {
     final Mat grayFrame = new Mat();
     final MatOfRect faces = new MatOfRect();
-    final Mat src = Imgcodecs.imread(input);
+    final Mat src = Imgcodecs.imread(input.getAbsolutePath());
 
     Imgproc.cvtColor(src, grayFrame, Imgproc.COLOR_BGR2GRAY);
     Imgproc.equalizeHist(grayFrame, grayFrame);
 
-    classifier.detectMultiScale(grayFrame, faces, 1.1, 2);
+    classifier.detectMultiScale(
+        grayFrame,
+        faces,
+        classifierProperties.getScaleFactor(),
+        classifierProperties.getMinNeighbours(),
+        classifierProperties.getFlags(),
+        classifierProperties.getMinFaceSize(),
+        classifierProperties.getMaxFaceSize());
 
-    // Don't create images with no faces detected
-    if (faces.empty()) return Mono.empty();
+    // Don't return images with no faces detected
+    if (faces.empty()) return new ArrayDeque<>();
 
-    drawBoxes(faces, src);
-
-    final ResponseBuilder responseBuilder = new ResponseBuilder(input, faces).build();
-
-    return Imgcodecs.imwrite(responseBuilder.getOutput(), src)
-        ? Mono.just(responseBuilder.getResult())
-        : Mono.empty();
+    return buildFaceBox(faces);
   }
 
   /**
-   * Draws the images around a new copy of the image. This will draw multiple boxes if multiple
-   * faces are found on the image.
+   * Save the location of where each face is found. Will save multiple locations, if multiple faces
+   * are found in the image
    */
-  private void drawBoxes(final MatOfRect faceDetections, final Mat src) {
+  private ArrayDeque<FaceCoordinates> buildFaceBox(final MatOfRect faceDetections) {
+
+    final ArrayDeque<FaceCoordinates> faceCoordinates =
+        new ArrayDeque<>(faceDetections.toArray().length);
 
     Arrays.stream(faceDetections.toArray())
-        .forEach(
+        .map(
             rect ->
-                Imgproc.rectangle(
-                    src,
-                    new Point(rect.x, rect.y),
-                    new Point(rect.x + rect.width, rect.y + rect.height),
-                    new Scalar(0, 255, 0),
-                    2));
-  }
+                FaceCoordinates.builder()
+                    .x(rect.x)
+                    .y(rect.y)
+                    .width(rect.width)
+                    .height(rect.height)
+                    .build())
+        .forEach(faceCoordinates::push);
 
-  /** Builds the response object. */
-  @RequiredArgsConstructor
-  private static class ResponseBuilder {
-
-    private final String input;
-
-    private final MatOfRect faces;
-
-    @Getter private String output;
-
-    @Getter private DetectRequest result;
-
-    public ResponseBuilder build() {
-      output =
-          String.format(
-              "%s/%s-terrible.jpg", new File(input).getParent(), FilenameUtils.getBaseName(input));
-
-      result =
-          DetectRequest.builder()
-              .input(input)
-              .output(output)
-              .faceCount(faces.toList().size())
-              .build();
-
-      return this;
-    }
+    return faceCoordinates;
   }
 }
