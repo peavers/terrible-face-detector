@@ -1,0 +1,12 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: terrible-face-detector
+
+classifier:
+  flags: 0
+  minNeighbours: 4
+  scaleFactor: 1.05
+  classifierPath: "haarcascades/haarcascade_frontalface_default.xml"

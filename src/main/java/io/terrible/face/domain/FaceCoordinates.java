@@ -10,11 +10,12 @@ import lombok.RequiredArgsConstructor;
 @Builder
 @AllArgsConstructor
 @RequiredArgsConstructor
-public class DetectRequest {
+public class FaceCoordinates {
+  private int x;
 
-  private String input;
+  private int y;
 
-  private String output;
+  private int width;
 
-  private int faceCount;
+  private int height;
 }
