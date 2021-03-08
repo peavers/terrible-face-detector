@@ -25,7 +25,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
 
     // OpenCV
-    implementation 'org.openpnp:opencv:4.3.0-3'
+    implementation 'org.openpnp:opencv:4.5.1-0'
 
     // Apache
     implementation 'org.apache.commons:commons-lang3:3.11'
