@@ -28,7 +28,7 @@ dependencies {
     implementation 'org.openpnp:opencv:4.5.1-0'
 
     // Apache
-    implementation 'org.apache.commons:commons-lang3:3.11'
+    implementation 'org.apache.commons:commons-lang3:3.12.0'
     implementation 'commons-io:commons-io:2.8.0'
 
     // Google
